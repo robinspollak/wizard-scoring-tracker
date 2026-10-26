@@ -31,6 +31,19 @@ export function betsAreIllegal(bets: number[], cards: number): boolean {
   return bets.reduce((a, b) => a + b, 0) === cards;
 }
 
+/**
+ * Standard scoring: an exact bet scores 20 + 10 per trick, otherwise −10 per
+ * trick off. Returns a hint when a hand-entered score can't happen, else null.
+ */
+export function scoreProblem(bet: number, score: number, cards: number): string | null {
+  const made = 20 + 10 * bet;
+  const maxOff = Math.max(bet, cards - bet);
+  if (score === made) return null;
+  if (score < 0 && score % 10 === 0 && -score / 10 <= maxOff) return null;
+  const misses = maxOff === 1 ? "−10" : `−10 to −${10 * maxOff}`;
+  return `bet ${bet} scores ${made} or ${misses}`;
+}
+
 /** Scores are entered by hand, so a positive round score is our proxy for "made the bet". */
 export function madeBet(score: number): boolean {
   return score > 0;

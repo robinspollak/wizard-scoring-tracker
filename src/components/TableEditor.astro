@@ -1,0 +1,135 @@
+---
+import type { RoundRow } from "../lib/games";
+
+interface Props {
+  gameId: number;
+  players: string[];
+  rounds: RoundRow[];
+  /** Raw values from a rejected submit, keyed like the input names. */
+  draft: Record<string, string> | null;
+  error: string | null;
+}
+
+const { gameId, players, rounds, draft, error } = Astro.props;
+const value = (field: "bet" | "score", row: RoundRow, seat: number) =>
+  draft ? (draft[`${field}_${row.round}_${seat}`] ?? "") : (row.cells[seat][field] ?? "");
+---
+
+<form method="post" class="card" id="table-editor">
+  <input type="hidden" name="mode" value="table" />
+  <div class="card-head">
+    <h2>Edit table</h2>
+  </div>
+  <div class="sheet-wrap">
+    <table class="sheet sheet-edit">
+      <thead>
+        <tr>
+          <th class="rnd">Rd</th>
+          {players.map((p) => <th>{p}</th>)}
+        </tr>
+      </thead>
+      <tbody>
+        {
+          rounds.map((row) => (
+            <tr data-cards={row.cards}>
+              <th class="rnd" scope="row">
+                <span class="r">{row.round}</span>
+                <span class="c">{row.cards} cards</span>
+              </th>
+              {players.map((p, seat) => (
+                <td>
+                  <div class="cell">
+                    {seat === row.dealer && <span class="deal-card" title="dealer" />}
+                    <input
+                      class="bet-input"
+                      name={`bet_${row.round}_${seat}`}
+                      type="text"
+                      inputmode="numeric"
+                      pattern="[0-9]*"
+                      aria-label={`${p} bet, round ${row.round}`}
+                      value={value("bet", row, seat)}
+                      data-bet
+                    />
+                    <input
+                      class="score-input"
+                      name={`score_${row.round}_${seat}`}
+                      type="number"
+                      step="1"
+                      aria-label={`${p} score, round ${row.round}`}
+                      value={value("score", row, seat)}
+                      data-score={seat}
+                      data-name={p}
+                    />
+                  </div>
+                </td>
+              ))}
+            </tr>
+          ))
+        }
+      </tbody>
+      <tfoot>
+        <tr>
+          <td class="rnd small muted">Total</td>
+          {players.map((_, seat) => <td class="num" data-total={seat}>0</td>)}
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  <div class="legend">
+    <span>Small box = bet</span>
+    <span>Big box = round score (not the running total)</span>
+    <span>Leave a whole round blank if it hasn't been played</span>
+  </div>
+  <p class="notice notice-warn" id="table-warning" hidden style="margin-top:12px"></p>
+  <p class="notice notice-warn" id="table-score-warning" hidden style="margin-top:12px"></p>
+  {error && <p class="notice notice-warn">{error}</p>}
+  <div class="actions" style="margin-top:16px">
+    <a href={`/games/${gameId}`} class="btn btn-ghost">Cancel</a>
+    <button type="submit" class="btn btn-dark">Save table</button>
+  </div>
+</form>
+
+<script>
+  import { scoreProblem } from "../lib/wizard";
+
+  const form = document.getElementById("table-editor") as HTMLFormElement | null;
+  if (form) {
+    const warning = document.getElementById("table-warning")!;
+    const scoreWarning = document.getElementById("table-score-warning")!;
+    const refresh = () => {
+      const totals = new Map<string, number>();
+      for (const input of form.querySelectorAll<HTMLInputElement>("input[data-score]")) {
+        const seat = input.dataset.score!;
+        totals.set(seat, (totals.get(seat) ?? 0) + (Number(input.value) || 0));
+      }
+      for (const cell of form.querySelectorAll<HTMLElement>("[data-total]")) {
+        cell.textContent = String(totals.get(cell.dataset.total!) ?? 0);
+      }
+      const bad: string[] = [];
+      const odd: string[] = [];
+      for (const row of form.querySelectorAll<HTMLTableRowElement>("tbody tr")) {
+        const bets = [...row.querySelectorAll<HTMLInputElement>("input[data-bet]")];
+        const full = bets.every((b) => b.value.trim() !== "");
+        const sum = bets.reduce((a, b) => a + (Number(b.value) || 0), 0);
+        const cards = Number(row.dataset.cards);
+        const illegal = full && sum === cards;
+        for (const [seat, scoreInput] of row.querySelectorAll<HTMLInputElement>("input[data-score]").entries()) {
+          const bet = bets[seat].value.trim();
+          const score = scoreInput.value.trim();
+          const problem =
+            /^\d+$/.test(bet) && /^-?\d+$/.test(score) ? scoreProblem(Number(bet), Number(score), cards) : null;
+          scoreInput.classList.toggle("odd", problem !== null);
+          if (problem) odd.push(`round ${row.querySelector(".r")!.textContent} ${scoreInput.dataset.name} (${problem})`);
+        }
+        row.classList.toggle("illegal", illegal);
+        if (illegal) bad.push(row.querySelector(".r")!.textContent!);
+      }
+      warning.hidden = bad.length === 0;
+      warning.textContent = `Bets add up to the number of cards in round ${bad.join(", ")}. Not allowed.`;
+      scoreWarning.hidden = odd.length === 0;
+      scoreWarning.textContent = `Double-check: ${odd.join("; ")}.`;
+    };
+    form.addEventListener("input", refresh);
+    refresh();
+  }
+</script>

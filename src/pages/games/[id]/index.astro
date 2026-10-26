@@ -1,5 +1,7 @@
 ---
 import Base from "../../../layouts/Base.astro";
+import { eq } from "drizzle-orm";
+import TableEditor from "../../../components/TableEditor.astro";
 import { db, roundEntries } from "../../../db";
 import { loadSheet } from "../../../lib/games";
 import { longDate } from "../../../lib/names";
@@ -10,10 +12,54 @@ let sheet = Number.isInteger(id) ? await loadSheet(id) : null;
 if (!sheet) return new Response("No such game", { status: 404 });
 
 let error: string | null = null;
+let tableError: string | null = null;
+let tableDraft: Record<string, string> | null = null;
+
+const parseWhole = (raw: FormDataEntryValue | null) => {
+  const s = String(raw ?? "").trim().replace(/[−–]/g, "-");
+  return /^-?\d+$/.test(s) ? Number(s) : s === "" ? null : NaN;
+};
+
+// Save the whole table at once. Blank cells are allowed; half-filled rounds stay in progress.
+const form = Astro.request.method === "POST" ? await Astro.request.formData() : null;
+
+if (form?.get("mode") === "table") {
+  const n = sheet.players.length;
+  const rows: { gameId: number; round: number; seat: number; bet: number | null; score: number | null }[] = [];
+  const problems: string[] = [];
+  tableDraft = {};
+
+  for (const row of sheet.rounds) {
+    const bets: (number | null)[] = [];
+    for (let seat = 0; seat < n; seat++) {
+      const betRaw = form.get(`bet_${row.round}_${seat}`);
+      const scoreRaw = form.get(`score_${row.round}_${seat}`);
+      tableDraft[`bet_${row.round}_${seat}`] = String(betRaw ?? "");
+      tableDraft[`score_${row.round}_${seat}`] = String(scoreRaw ?? "");
+      const bet = parseWhole(betRaw);
+      const score = parseWhole(scoreRaw);
+      if (Number.isNaN(bet) || (bet !== null && (bet < 0 || bet > row.cards)))
+        problems.push(`round ${row.round}: bets must be 0–${row.cards}`);
+      if (Number.isNaN(score)) problems.push(`round ${row.round}: scores must be whole numbers`);
+      bets.push(bet);
+      if (bet !== null || score !== null) rows.push({ gameId: id, round: row.round, seat, bet, score });
+    }
+    if (bets.every((b) => b !== null) && betsAreIllegal(bets as number[], row.cards))
+      problems.push(`round ${row.round}: bets add up to ${row.cards}`);
+  }
+
+  if (problems.length) tableError = `Fix ${[...new Set(problems)].join("; ")}.`;
+  else {
+    await db.transaction(async (tx) => {
+      await tx.delete(roundEntries).where(eq(roundEntries.gameId, id));
+      if (rows.length) await tx.insert(roundEntries).values(rows);
+    });
+    return Astro.redirect(`/games/${id}`);
+  }
+}
 
 // Save bets and/or scores for one round. Mode decides which fields the form sent.
-if (Astro.request.method === "POST") {
-  const form = await Astro.request.formData();
+else if (form) {
   const round = Number(form.get("round"));
   const mode = String(form.get("mode"));
   const n = sheet.players.length;
@@ -71,6 +117,7 @@ const panelMode: "bets" | "scores" | "both" | null = !panel
     : panel.status === "playing"
       ? "scores"
       : "bets";
+const tableMode = tableDraft !== null || Astro.url.searchParams.get("edit") === "table";
 const order = panel ? biddingOrder(panel.round, n) : [];
 const lead = Math.max(...totals);
 const signed = (x: number) => (x > 0 ? `+${x}` : x < 0 ? `−${Math.abs(x)}` : "0");
@@ -98,7 +145,7 @@ const signed = (x: number) => (x > 0 ? `+${x}` : x < 0 ? `−${Math.abs(x)}` : "
     }
 
     {
-      panel && panelMode && (
+      panel && panelMode && !tableMode && (
         <form method="post" class="card entry" id="entry" data-cards={panel.cards} data-mode={panelMode}>
           <input type="hidden" name="round" value={panel.round} />
           <input type="hidden" name="mode" value={panelMode} />
@@ -122,9 +169,13 @@ const signed = (x: number) => (x > 0 ? `+${x}` : x < 0 ? `−${Math.abs(x)}` : "
               const cell = panel.cells[seat];
               const isDealer = seat === panel.dealer;
               return (
-                <div class="entry-row">
+                <div class="entry-row" data-name={players[seat]} data-bet-value={cell.bet ?? ""}>
                   <span class="who">
-                    {players[seat]} {isDealer && <small>🎩 deals</small>}
+                    {players[seat]} {isDealer && (
+                      <small>
+                        <span class="deal-card" /> deals
+                      </small>
+                    )}
                   </span>
                   {panelMode === "scores" && <span class="bet-tag">bet {cell.bet}</span>}
                   {panelMode !== "scores" && (
@@ -164,6 +215,7 @@ const signed = (x: number) => (x > 0 ? `+${x}` : x < 0 ? `−${Math.abs(x)}` : "
                         aria-label={`${players[seat]}'s score`}
                         placeholder="score"
                         value={cell.score ?? ""}
+                        data-score
                         required
                       />
                     </span>
@@ -183,6 +235,7 @@ const signed = (x: number) => (x > 0 ? `+${x}` : x < 0 ? `−${Math.abs(x)}` : "
           <p class="notice notice-warn" id="bet-warning" hidden>
             Bets add up to {panel.cards}. Not allowed: the dealer has to change their bet.
           </p>
+          <p class="notice notice-warn" id="score-warning" hidden />
           {error && <p class="notice notice-warn">{error}</p>}
 
           <div class="actions">
@@ -205,7 +258,14 @@ const signed = (x: number) => (x > 0 ? `+${x}` : x < 0 ? `−${Math.abs(x)}` : "
       )
     }
 
+    {tableMode ? (
+      <TableEditor gameId={game.id} players={players} rounds={rounds} draft={tableDraft} error={tableError} />
+    ) : (
     <section class="card">
+      <div class="card-head">
+        <h2>Score sheet</h2>
+        <a href={`/games/${game.id}?edit=table`} class="btn btn-ghost btn-small">Edit table</a>
+      </div>
       <div class="sheet-wrap">
         <table class="sheet">
           <thead>
@@ -234,7 +294,7 @@ const signed = (x: number) => (x > 0 ? `+${x}` : x < 0 ? `−${Math.abs(x)}` : "
                             {cell.bet}
                           </span>
                         )}
-                        {seat === row.dealer && <span class="dealer" title="dealer">🎩</span>}
+                        {seat === row.dealer && <span class="deal-card" title="dealer" />}
                         {cell.total !== null ? (
                           <>
                             <span class="total">{cell.total}</span>
@@ -263,10 +323,11 @@ const signed = (x: number) => (x > 0 ? `+${x}` : x < 0 ? `−${Math.abs(x)}` : "
       <div class="legend">
         <span>Big number = running total</span>
         <span>Circle = bet (green made, red missed)</span>
-        <span>🎩 = dealer, bids last</span>
+        <span><span class="deal-card" /> = dealer, bids last</span>
         <span>Tap a round to fix it</span>
       </div>
     </section>
+    )}
 
     {
       game.hasPhoto ? (
@@ -281,6 +342,8 @@ const signed = (x: number) => (x > 0 ? `+${x}` : x < 0 ? `−${Math.abs(x)}` : "
 </Base>
 
 <script>
+  import { scoreProblem } from "../../../lib/wizard";
+
   const form = document.getElementById("entry") as HTMLFormElement | null;
   if (form) {
     const cards = Number(form.dataset.cards);
@@ -289,7 +352,28 @@ const signed = (x: number) => (x > 0 ? `+${x}` : x < 0 ? `−${Math.abs(x)}` : "
     const warning = document.getElementById("bet-warning")!;
     const submit = document.getElementById("entry-submit") as HTMLButtonElement;
 
+    const scoreWarning = document.getElementById("score-warning")!;
+
+    const checkScores = () => {
+      const odd: string[] = [];
+      for (const row of form.querySelectorAll<HTMLElement>(".entry-row")) {
+        const scoreInput = row.querySelector<HTMLInputElement>("input[data-score]");
+        if (!scoreInput) continue;
+        const betRaw = row.querySelector<HTMLInputElement>("input[data-bet]")?.value ?? row.dataset.betValue ?? "";
+        const scoreRaw = scoreInput.value.trim().replace(/[−–]/g, "-");
+        const problem =
+          /^\d+$/.test(betRaw.trim()) && /^-?\d+$/.test(scoreRaw)
+            ? scoreProblem(Number(betRaw), Number(scoreRaw), cards)
+            : null;
+        scoreInput.classList.toggle("odd", problem !== null);
+        if (problem) odd.push(`${row.dataset.name} (${problem})`);
+      }
+      scoreWarning.hidden = odd.length === 0;
+      scoreWarning.textContent = `Double-check: ${odd.join("; ")}.`;
+    };
+
     const refresh = () => {
+      checkScores();
       if (!betInputs.length) return;
       const filled = betInputs.filter((i) => i.value.trim() !== "");
       const sum = filled.reduce((a, i) => a + (Number(i.value) || 0), 0);
