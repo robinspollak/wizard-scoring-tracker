@@ -3,6 +3,7 @@ import type { Config } from "drizzle-kit";
 
 // Load Vercel-pulled env file first (preferred), then any local .env.
 config({ path: ".env.development.local" });
+config({ path: ".env.local" });
 config();
 
 const url =

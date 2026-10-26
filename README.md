@@ -17,7 +17,7 @@ in the browser and stored in Postgres. The whole site sits behind one password
 
 ```sh
 npm install
-vercel env pull .env.development.local   # or put DATABASE_URL in .env
+vercel env pull .env.local   # or put DATABASE_URL in .env
 npm run db:migrate   # Vercel also runs migrations on every deploy (vercel-build)
 npm run dev
 ```
