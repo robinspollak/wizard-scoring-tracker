@@ -8,10 +8,12 @@
   --line: #dfdbd2;
   --accent: #5b45a0;
   --accent-soft: #e9e4f5;
-  --gold: #f1c84b;
-  --gold-ink: #3d2f00;
-  --dark-tile: #1c1b19;
-  --dark-tile-ink: #f3f1ec;
+  --lav: #dcd3f7;
+  --lav-ink: #2b2160;
+  --peach: #f5cfbc;
+  --peach-ink: #5a2a14;
+  --primary: #3d2f72;
+  --primary-ink: #ffffff;
   --good: #2f7d4f;
   --bad: #b5452f;
   --warn-bg: #ffe3d6;
@@ -35,8 +37,12 @@
     --line: #36332e;
     --accent: #b3a3f0;
     --accent-soft: #2e2843;
-    --gold: #e8bf45;
-    --dark-tile: #2c2a26;
+    --lav: #3b3266;
+    --lav-ink: #ece6ff;
+    --peach: #5a3627;
+    --peach-ink: #ffe2d4;
+    --primary: #b9a8f5;
+    --primary-ink: #1a1433;
     --good: #6cc58f;
     --bad: #f08a72;
     --warn-bg: #4a2418;
@@ -102,7 +108,7 @@ a { color: var(--accent); }
   width: 46px;
   height: 46px;
   border-radius: 50%;
-  background: var(--dark-tile);
+  background: var(--primary);
   font-size: 26px;
 }
 
@@ -122,7 +128,7 @@ a { color: var(--accent); }
   background: var(--card-2);
   color: var(--ink);
 }
-.btn-dark { background: var(--ink); color: var(--bg); }
+.btn-dark { background: var(--primary); color: var(--primary-ink); }
 .btn-accent { background: var(--accent); color: #fff; }
 .btn-ghost { background: transparent; border-color: var(--line); }
 .btn-danger { background: transparent; border-color: var(--bad); color: var(--bad); }
@@ -170,17 +176,17 @@ a { color: var(--accent); }
 }
 .tile .big { font: 650 2.3rem/1.1 var(--sans); letter-spacing: -0.02em; margin: 6px 0 4px; position: relative; }
 .tile p { margin: 0; position: relative; }
-.tile-gold { background: var(--gold); color: var(--gold-ink); }
-.tile-gold::after {
+.tile-lav { background: var(--lav); color: var(--lav-ink); }
+.tile-lav::after {
   content: "";
   position: absolute;
   inset: 0 0 0 55%;
-  background-image: radial-gradient(circle, rgba(61, 47, 0, 0.28) 1.6px, transparent 2px);
+  background-image: radial-gradient(circle, color-mix(in srgb, currentColor 30%, transparent) 1.6px, transparent 2px);
   background-size: 16px 16px;
   mask-image: linear-gradient(to right, transparent, #000 40%);
 }
-.tile-dark { background: var(--dark-tile); color: var(--dark-tile-ink); }
-.tile-dark .label, .tile-gold .label { color: inherit; opacity: 0.8; }
+.tile-peach { background: var(--peach); color: var(--peach-ink); }
+.tile-peach .label, .tile-lav .label { color: inherit; opacity: 0.8; }
 .tile dl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin: 8px 0 0; }
 .tile dt { color: var(--muted); font-size: 0.85rem; }
 .tile dd { margin: 0 0 4px; font: 600 1.35rem var(--sans); }
@@ -201,7 +207,7 @@ a { color: var(--accent); }
   color: var(--muted);
   font-weight: 600;
 }
-.tabs a[aria-current="page"] { background: var(--ink); color: var(--bg); }
+.tabs a[aria-current="page"] { background: var(--primary); color: var(--primary-ink); }
 
 /* List rows */
 .rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
@@ -235,7 +241,7 @@ a.row:hover { outline: 2px solid var(--accent-soft); }
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.pill-dark { background: var(--ink); color: var(--bg); }
+.pill-dark { background: var(--primary); color: var(--primary-ink); }
 .badge {
   display: inline-block;
   margin-left: 6px;
@@ -245,8 +251,8 @@ a.row:hover { outline: 2px solid var(--accent-soft); }
   letter-spacing: 0.06em;
   text-transform: uppercase;
   vertical-align: 3px;
-  background: var(--gold);
-  color: var(--gold-ink);
+  background: var(--lav);
+  color: var(--lav-ink);
 }
 .status {
   display: inline-block;
@@ -259,7 +265,7 @@ a.row:hover { outline: 2px solid var(--accent-soft); }
   font-size: 0.85rem;
   text-align: center;
 }
-.status-won { background: var(--gold); color: var(--gold-ink); }
+.status-won { background: var(--peach); color: var(--peach-ink); }
 
 /* Awards */
 .awards {
@@ -302,7 +308,7 @@ input:focus-visible, .btn:focus-visible { outline: 3px solid var(--accent); outl
   font: 500 0.95rem var(--sans);
   cursor: pointer;
 }
-.chip-on { background: var(--ink); color: var(--bg); }
+.chip-on { background: var(--primary); color: var(--primary-ink); }
 
 .seat-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
 .seat-list li {
