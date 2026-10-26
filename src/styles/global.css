@@ -220,6 +220,8 @@ a.row:hover { outline: 2px solid var(--accent-soft); }
 .row .title { font-weight: 600; font-size: 1.1rem; }
 .row .sub { color: var(--muted); font-size: 0.9rem; }
 .row .right { text-align: right; }
+.row .thumb { flex: none; width: 56px; height: 56px; border-radius: 14px; object-fit: cover; }
+@media (max-width: 560px) { .row .thumb { display: none; } }
 .pill {
   flex: none;
   display: grid;

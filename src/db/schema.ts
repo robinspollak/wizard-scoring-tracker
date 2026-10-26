@@ -18,10 +18,11 @@ export const games = pgTable("games", {
   name: text("name").notNull(),
   playedOn: date("played_on").notNull(),
   numRounds: integer("num_rounds").notNull(),
-  // Photos are resized in the browser before upload, so they're small enough
-  // to live in Postgres and spare us a separate blob store.
+  // Photos are normalized to a ~1600px JPEG (plus a thumbnail) on upload, so
+  // they're small enough to live in Postgres and spare us a separate blob store.
   photo: bytea("photo"),
   photoType: text("photo_type"),
+  photoThumb: bytea("photo_thumb"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

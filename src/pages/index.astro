@@ -134,7 +134,7 @@ const pad = (i: number) => String(i + 1).padStart(2, "0");
                     {s.finished ? `${s.totals[s.winners[0]]} pts` : `round ${s.currentRound} of ${s.game.numRounds}`}
                   </div>
                 </div>
-                {s.game.hasPhoto && <span aria-label="has photo">📷</span>}
+                {s.game.hasPhoto && <img class="thumb" src={`/photos/${s.game.id}?thumb`} alt="" loading="lazy" />}
               </a>
             </li>
           ))}

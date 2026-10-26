@@ -38,7 +38,7 @@ if (Astro.request.method === "POST") {
   else if (new Set(names.map(playerKey)).size !== names.length) error = "Two players have the same name.";
   else if (typeof photo === "string") error = photo;
   else {
-    const photoChange = photo ?? (form.get("remove_photo") ? { photo: null, photoType: null } : {});
+    const photoChange = photo ?? (form.get("remove_photo") ? { photo: null, photoType: null, photoThumb: null } : {});
     await db.transaction(async (tx) => {
       await tx.update(games).set({ name, playedOn, numRounds, ...photoChange }).where(eq(games.id, id));
       for (const [seat, playerName] of names.entries()) {
