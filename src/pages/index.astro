@@ -120,16 +120,18 @@ const pad = (i: number) => String(i + 1).padStart(2, "0");
                 <span class="pill">{shortDate(s.game.playedOn)}</span>
                 <div class="grow">
                   <div class="title">
-                    {s.game.name}
-                    {!s.finished && <span class="badge badge-live">Round {s.currentRound}/{s.game.numRounds}</span>}
+                    {s.game.name}{" "}
+                    {s.finished ? (
+                      <span class="status status-won">
+                        {s.winners.map((w) => s.players[w]).join(" & ")} win{s.winners.length === 1 ? "s" : ""}!
+                      </span>
+                    ) : (
+                      <span class="status">Incomplete</span>
+                    )}
                   </div>
                   <div class="sub">
-                    {s.players.join(", ")}
-                    {s.finished && (
-                      <>
-                        {" "}· 🏆 {s.winners.map((w) => s.players[w]).join(" & ")} ({s.totals[s.winners[0]]})
-                      </>
-                    )}
+                    {s.players.join(", ")} ·{" "}
+                    {s.finished ? `${s.totals[s.winners[0]]} pts` : `round ${s.currentRound} of ${s.game.numRounds}`}
                   </div>
                 </div>
                 {s.game.hasPhoto && <span aria-label="has photo">📷</span>}
