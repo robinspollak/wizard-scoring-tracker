@@ -1,0 +1,130 @@
+---
+import { and, eq, gt } from "drizzle-orm";
+import Base from "../../../layouts/Base.astro";
+import { db, gamePlayers, games, roundEntries } from "../../../db";
+import { loadSheet } from "../../../lib/games";
+import { cleanPlayerName, playerKey } from "../../../lib/names";
+import { readPhotoUpload } from "../../../lib/photos";
+import { maxRounds } from "../../../lib/wizard";
+
+const id = Number(Astro.params.id);
+const sheet = Number.isInteger(id) ? await loadSheet(id) : null;
+if (!sheet) return new Response("No such game", { status: 404 });
+
+const { game, players, rounds } = sheet;
+const lastPlayed = rounds.filter((r) => r.status !== "empty").at(-1)?.round ?? 1;
+const roundsMax = maxRounds(players.length);
+let error: string | null = null;
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+
+  if (form.get("action") === "delete") {
+    await db.delete(games).where(eq(games.id, id));
+    return Astro.redirect("/?tab=games");
+  }
+
+  const name = String(form.get("name") ?? "").trim();
+  const playedOn = String(form.get("played_on") ?? "");
+  const numRounds = Number(form.get("rounds"));
+  const names = players.map((_, seat) => cleanPlayerName(String(form.get(`player_${seat}`) ?? "")));
+  const photo = await readPhotoUpload(form);
+
+  if (!name) error = "The game needs a name.";
+  else if (!/^\d{4}-\d{2}-\d{2}$/.test(playedOn)) error = "That date doesn't look right.";
+  else if (!Number.isInteger(numRounds) || numRounds < lastPlayed || numRounds > roundsMax)
+    error = `Rounds must be between ${lastPlayed} (already played) and ${roundsMax}.`;
+  else if (names.some((p) => !p)) error = "Every player needs a name.";
+  else if (new Set(names.map(playerKey)).size !== names.length) error = "Two players have the same name.";
+  else if (typeof photo === "string") error = photo;
+  else {
+    const photoChange = photo ?? (form.get("remove_photo") ? { photo: null, photoType: null } : {});
+    await db.transaction(async (tx) => {
+      await tx.update(games).set({ name, playedOn, numRounds, ...photoChange }).where(eq(games.id, id));
+      for (const [seat, playerName] of names.entries()) {
+        await tx
+          .update(gamePlayers)
+          .set({ name: playerName })
+          .where(and(eq(gamePlayers.gameId, id), eq(gamePlayers.seat, seat)));
+      }
+      // Drop stray entries past the new end (only possible for unplayed rounds).
+      await tx.delete(roundEntries).where(and(eq(roundEntries.gameId, id), gt(roundEntries.round, numRounds)));
+    });
+    return Astro.redirect(`/games/${id}`);
+  }
+}
+---
+
+<Base title={`Edit ${game.name}`}>
+  <div class="stack">
+    <a href={`/games/${id}`} class="small">← Back to the game</a>
+    <h1>Edit game</h1>
+
+    <form method="post" enctype="multipart/form-data" class="stack" data-photo-upload>
+      <section class="card">
+        <div class="grid-2">
+          <div>
+            <label class="label" for="name">Name</label>
+            <input id="name" name="name" value={game.name} required />
+          </div>
+          <div>
+            <label class="label" for="played_on">Played on</label>
+            <input id="played_on" name="played_on" type="date" value={game.playedOn} required />
+          </div>
+        </div>
+        <div class="field">
+          <label class="label" for="rounds">Rounds ({lastPlayed}–{roundsMax})</label>
+          <input id="rounds" name="rounds" type="number" inputmode="numeric" min={lastPlayed} max={roundsMax} value={game.numRounds} required />
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 style="margin-bottom:12px">Players</h2>
+        <p class="muted small" style="margin-top:0">Fix a typo here. Stats match players across games by name.</p>
+        <div class="stack">
+          {
+            players.map((p, seat) => (
+              <div>
+                <label class="label" for={`player_${seat}`}>Seat {seat + 1}</label>
+                <input id={`player_${seat}`} name={`player_${seat}`} value={p} required />
+              </div>
+            ))
+          }
+        </div>
+      </section>
+
+      <section class="card">
+        <label class="label" for="photo">{game.hasPhoto ? "Replace photo" : "Photo"}</label>
+        {game.hasPhoto && <img src={`/photos/${id}`} alt="" class="game-photo" style="max-height:220px;margin-bottom:12px" />}
+        <input id="photo" name="photo" type="file" accept="image/*" />
+        {
+          game.hasPhoto && (
+            <label class="small" style="display:block;margin-top:10px">
+              <input type="checkbox" name="remove_photo" value="1" /> Remove photo
+            </label>
+          )
+        }
+      </section>
+
+      {error && <p class="notice notice-warn">{error}</p>}
+
+      <div class="actions">
+        <a href={`/games/${id}`} class="btn btn-ghost">Cancel</a>
+        <button type="submit" class="btn btn-dark">Save changes</button>
+      </div>
+    </form>
+
+    <form method="post" id="delete-form" class="actions" style="justify-content:flex-start">
+      <input type="hidden" name="action" value="delete" />
+      <button type="submit" class="btn btn-danger">Delete game</button>
+    </form>
+  </div>
+</Base>
+
+<script>
+  import "../../../scripts/photo-upload";
+
+  document.getElementById("delete-form")!.addEventListener("submit", (e) => {
+    if (!confirm("Delete this game and all its scores? This can't be undone.")) e.preventDefault();
+  });
+</script>

@@ -1,0 +1,39 @@
+---
+import "../styles/global.css";
+
+interface Props {
+  title?: string;
+  bare?: boolean;
+}
+
+const { title, bare = false } = Astro.props;
+const fullTitle = title ? `${title} · Whizard` : "Whizard";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f2ecdf" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#16131f" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{fullTitle}</title>
+  </head>
+  <body>
+    {
+      !bare && (
+        <header class="site-header">
+          <a href="/" class="brand">
+            <span class="logo" aria-hidden="true">🧙</span>
+            <span>Whizard</span>
+          </a>
+          <a href="/games/new" class="btn btn-dark">+ New game</a>
+        </header>
+      )
+    }
+    <main>
+      <slot />
+    </main>
+  </body>
+</html>

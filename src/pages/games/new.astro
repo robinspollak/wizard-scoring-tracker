@@ -1,0 +1,217 @@
+---
+import Base from "../../layouts/Base.astro";
+import { db, gamePlayers, games } from "../../db";
+import { countGamesByDate, knownPlayers } from "../../lib/games";
+import { cleanPlayerName, defaultGameName, playerKey } from "../../lib/names";
+import { readPhotoUpload } from "../../lib/photos";
+import { MAX_PLAYERS, MIN_PLAYERS, maxRounds } from "../../lib/wizard";
+
+// Server clock is UTC; the form script swaps in the browser's local date.
+const today = new Date().toISOString().slice(0, 10);
+
+let error: string | null = null;
+let values = { name: "", playedOn: today, rounds: "", players: [] as string[] };
+
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const players = form.getAll("player").map((p) => cleanPlayerName(String(p))).filter(Boolean);
+  const playedOn = String(form.get("played_on") ?? "") || today;
+  const rounds = Number(form.get("rounds"));
+  values = { name: String(form.get("name") ?? "").trim(), playedOn, rounds: String(form.get("rounds") ?? ""), players };
+
+  const photo = await readPhotoUpload(form);
+  if (players.length < MIN_PLAYERS) error = `Add at least ${MIN_PLAYERS} players.`;
+  else if (players.length > MAX_PLAYERS) error = `A 52-card deck only stretches to ${MAX_PLAYERS} players.`;
+  else if (new Set(players.map(playerKey)).size !== players.length) error = "Two players have the same name.";
+  else if (!/^\d{4}-\d{2}-\d{2}$/.test(playedOn)) error = "That date doesn't look right.";
+  else if (!Number.isInteger(rounds) || rounds < 1 || rounds > maxRounds(players.length))
+    error = `Rounds must be between 1 and ${maxRounds(players.length)} for ${players.length} players.`;
+  else if (typeof photo === "string") error = photo;
+  else {
+    const counts = await countGamesByDate();
+    const name = values.name || defaultGameName(playedOn, counts[playedOn] ?? 0);
+    const id = await db.transaction(async (tx) => {
+      const [game] = await tx
+        .insert(games)
+        .values({ name, playedOn, numRounds: rounds, ...(photo ?? {}) })
+        .returning({ id: games.id });
+      await tx.insert(gamePlayers).values(players.map((p, seat) => ({ gameId: game.id, seat, name: p })));
+      return game.id;
+    });
+    return Astro.redirect(`/games/${id}`);
+  }
+}
+
+const [counts, known] = await Promise.all([countGamesByDate(), knownPlayers()]);
+const pageData = { counts, known, players: values.players, rounds: values.rounds, maxPlayers: MAX_PLAYERS };
+---
+
+<Base title="New game">
+  <form method="post" enctype="multipart/form-data" class="stack" id="new-game" data-photo-upload>
+    <h1>New game</h1>
+
+    <section class="card">
+      <div class="grid-2">
+        <div>
+          <label class="label" for="name">Name</label>
+          <input id="name" name="name" value={values.name} placeholder={defaultGameName(values.playedOn, counts[values.playedOn] ?? 0)} />
+        </div>
+        <div>
+          <label class="label" for="played_on">Played on</label>
+          <input id="played_on" name="played_on" type="date" value={values.playedOn} data-server-default={values.playedOn === today} required />
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Players</h2>
+        <span class="muted small">In seating order. First player deals round 1.</span>
+      </div>
+      <ol class="seat-list" id="seats"></ol>
+      <div class="add-player">
+        <input id="new-player" placeholder="Type a name and hit Enter" autocomplete="off" />
+        <button type="button" class="btn btn-dark" id="add-player">Add</button>
+      </div>
+      <div class="chips" id="known" style="margin-top:12px"></div>
+    </section>
+
+    <section class="card">
+      <div class="grid-2">
+        <div>
+          <label class="label" for="rounds">Rounds</label>
+          <input id="rounds" name="rounds" type="number" inputmode="numeric" min="1" value={values.rounds} required />
+        </div>
+        <p class="muted small" id="rounds-hint" style="margin:0;align-self:end">Add players to see how many rounds fit.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <label class="label" for="photo">Photo (optional, can add later)</label>
+      <input id="photo" name="photo" type="file" accept="image/*" />
+    </section>
+
+    {error && <p class="notice notice-warn">{error}</p>}
+
+    <div class="actions">
+      <a href="/" class="btn btn-ghost">Cancel</a>
+      <button type="submit" class="btn btn-dark">Start game ✦</button>
+    </div>
+  </form>
+
+  <script type="application/json" id="new-game-data" set:html={JSON.stringify(pageData)} />
+</Base>
+
+<script>
+  import "../../scripts/photo-upload";
+  import { defaultGameName, cleanPlayerName, playerKey } from "../../lib/names";
+  import { cardsInRound, maxRounds } from "../../lib/wizard";
+
+  type PageData = {
+    counts: Record<string, number>;
+    known: string[];
+    players: string[];
+    rounds: string;
+    maxPlayers: number;
+  };
+  const data: PageData = JSON.parse(document.getElementById("new-game-data")!.textContent!);
+
+  const nameInput = document.getElementById("name") as HTMLInputElement;
+  const dateInput = document.getElementById("played_on") as HTMLInputElement;
+  const seatsEl = document.getElementById("seats")!;
+  const knownEl = document.getElementById("known")!;
+  const newPlayer = document.getElementById("new-player") as HTMLInputElement;
+  const roundsInput = document.getElementById("rounds") as HTMLInputElement;
+  const roundsHint = document.getElementById("rounds-hint")!;
+
+  let players = [...data.players];
+  let roundsTouched = data.rounds !== "";
+
+  if (dateInput.dataset.serverDefault === "true") {
+    const now = new Date();
+    const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
+    dateInput.value = local.toISOString().slice(0, 10);
+  }
+
+  function updateName() {
+    if (dateInput.value) nameInput.placeholder = defaultGameName(dateInput.value, data.counts[dateInput.value] ?? 0);
+  }
+
+  function updateRounds() {
+    const n = players.length;
+    const max = maxRounds(n);
+    if (n < 2) {
+      roundsHint.textContent = "Add players to see how many rounds fit.";
+      roundsInput.removeAttribute("max");
+      return;
+    }
+    roundsInput.max = String(max);
+    if (!roundsTouched || Number(roundsInput.value) > max) roundsInput.value = String(max);
+    const last = cardsInRound(Number(roundsInput.value) || max);
+    roundsHint.textContent = `${n} players: up to ${max} rounds (3 → ${cardsInRound(max)} cards). This game ends at ${last} cards.`;
+  }
+
+  function button(label: string, title: string, onClick: () => void) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "icon-btn";
+    b.textContent = label;
+    b.title = title;
+    b.setAttribute("aria-label", title);
+    b.addEventListener("click", onClick);
+    return b;
+  }
+
+  function render() {
+    seatsEl.replaceChildren(
+      ...players.map((name, i) => {
+        const li = document.createElement("li");
+        const no = Object.assign(document.createElement("span"), { className: "seat-no", textContent: `${i + 1}.` });
+        const label = Object.assign(document.createElement("span"), { className: "seat-name", textContent: name });
+        const hidden = Object.assign(document.createElement("input"), { type: "hidden", name: "player", value: name });
+        li.append(no, label, hidden);
+        if (i > 0) li.append(button("↑", `Move ${name} up`, () => { [players[i - 1], players[i]] = [players[i], players[i - 1]]; render(); }));
+        li.append(button("×", `Remove ${name}`, () => { players.splice(i, 1); render(); }));
+        return li;
+      }),
+    );
+    const inGame = new Set(players.map(playerKey));
+    knownEl.replaceChildren(
+      ...data.known
+        .filter((name) => !inGame.has(playerKey(name)))
+        .map((name) => {
+          const chip = Object.assign(document.createElement("button"), { type: "button", className: "chip", textContent: `+ ${name}` });
+          chip.addEventListener("click", () => add(name));
+          return chip;
+        }),
+    );
+    updateRounds();
+  }
+
+  function add(raw: string) {
+    const name = cleanPlayerName(raw);
+    if (!name || players.some((p) => playerKey(p) === playerKey(name)) || players.length >= data.maxPlayers) return;
+    players.push(name);
+    render();
+  }
+
+  newPlayer.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    add(newPlayer.value);
+    newPlayer.value = "";
+  });
+  document.getElementById("add-player")!.addEventListener("click", () => {
+    add(newPlayer.value);
+    newPlayer.value = "";
+    newPlayer.focus();
+  });
+  roundsInput.addEventListener("input", () => {
+    roundsTouched = true;
+    updateRounds();
+  });
+  dateInput.addEventListener("change", updateName);
+
+  updateName();
+  render();
+</script>

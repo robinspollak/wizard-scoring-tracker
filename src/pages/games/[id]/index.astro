@@ -1,0 +1,328 @@
+---
+import Base from "../../../layouts/Base.astro";
+import { db, roundEntries } from "../../../db";
+import { loadSheet } from "../../../lib/games";
+import { longDate } from "../../../lib/names";
+import { betsAreIllegal, biddingOrder, cardsInRound, madeBet } from "../../../lib/wizard";
+
+const id = Number(Astro.params.id);
+let sheet = Number.isInteger(id) ? await loadSheet(id) : null;
+if (!sheet) return new Response("No such game", { status: 404 });
+
+let error: string | null = null;
+
+// Save bets and/or scores for one round. Mode decides which fields the form sent.
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  const round = Number(form.get("round"));
+  const mode = String(form.get("mode"));
+  const n = sheet.players.length;
+  const cards = cardsInRound(round);
+  const wantBets = mode === "bets" || mode === "both";
+  const wantScores = mode === "scores" || mode === "both";
+
+  const parse = (field: string, seat: number) => {
+    const raw = String(form.get(`${field}_${seat}`) ?? "").trim().replace(/[−–]/g, "-");
+    return /^-?\d+$/.test(raw) ? Number(raw) : null;
+  };
+  const bets = Array.from({ length: n }, (_, seat) => parse("bet", seat));
+  const scores = Array.from({ length: n }, (_, seat) => parse("score", seat));
+  const row = sheet.rounds[round - 1];
+
+  if (!row) error = "That round doesn't exist.";
+  else if (wantBets && bets.some((b) => b === null || b < 0 || b > cards))
+    error = `Every bet needs to be between 0 and ${cards}.`;
+  else if (wantBets && betsAreIllegal(bets as number[], cards))
+    error = `Bets can't add up to ${cards}. Someone (probably the dealer) has to change theirs.`;
+  else if (wantScores && scores.some((s) => s === null)) error = "Every player needs a score.";
+  else {
+    await db.transaction(async (tx) => {
+      for (let seat = 0; seat < n; seat++) {
+        const bet = wantBets ? bets[seat] : row.cells[seat].bet;
+        const score = wantScores ? scores[seat] : row.cells[seat].score;
+        await tx
+          .insert(roundEntries)
+          .values({ gameId: id, round, seat, bet, score })
+          .onConflictDoUpdate({
+            target: [roundEntries.gameId, roundEntries.round, roundEntries.seat],
+            set: { bet, score },
+          });
+      }
+    });
+    return Astro.redirect(`/games/${id}`);
+  }
+}
+
+const { game, players, rounds, totals, currentRound, finished, winners } = sheet;
+const n = players.length;
+
+// Which round the panel edits: an explicit ?round=, else the one in play.
+const requestedRound = Number(Astro.url.searchParams.get("round"));
+const panelRound =
+  Number.isInteger(requestedRound) && requestedRound >= 1 && requestedRound <= (currentRound ?? game.numRounds)
+    ? requestedRound
+    : currentRound;
+const panel = panelRound ? rounds[panelRound - 1] : null;
+const editingPast = panel !== null && panel.round !== currentRound;
+const panelMode: "bets" | "scores" | "both" | null = !panel
+  ? null
+  : editingPast || Astro.url.searchParams.get("edit") === "both"
+    ? "both"
+    : panel.status === "playing"
+      ? "scores"
+      : "bets";
+const order = panel ? biddingOrder(panel.round, n) : [];
+const lead = Math.max(...totals);
+const signed = (x: number) => (x > 0 ? `+${x}` : x < 0 ? `−${Math.abs(x)}` : "0");
+---
+
+<Base title={game.name}>
+  <div class="stack">
+    <div>
+      <a href="/?tab=games" class="small">← All games</a>
+      <div class="card-head" style="margin:6px 0 0">
+        <h1>{game.name}</h1>
+        <a href={`/games/${game.id}/edit`} class="btn btn-ghost btn-small">Edit</a>
+      </div>
+      <p class="muted" style="margin:4px 0 0">
+        {longDate(game.playedOn)} · {n} players · {game.numRounds} rounds (3 → {cardsInRound(game.numRounds)} cards)
+      </p>
+    </div>
+
+    {
+      finished && (
+        <p class="notice notice-ok">
+          🏆 {winners.map((w) => players[w]).join(" & ")} win{winners.length === 1 ? "s" : ""} with {totals[winners[0]]}!
+        </p>
+      )
+    }
+
+    {
+      panel && panelMode && (
+        <form method="post" class="card entry" id="entry" data-cards={panel.cards} data-mode={panelMode}>
+          <input type="hidden" name="round" value={panel.round} />
+          <input type="hidden" name="mode" value={panelMode} />
+          <div class="card-head">
+            <h2>
+              Round {panel.round} · {panel.cards} cards
+            </h2>
+            <span class="muted small">
+              {panelMode === "bets" ? "Bets" : panelMode === "scores" ? "Scores" : "Fix this round"}
+            </span>
+          </div>
+
+          <div class="entry-rows">
+            {panelMode === "both" && (
+              <div class="entry-head" aria-hidden="true">
+                <span>bet</span>
+                <span>score</span>
+              </div>
+            )}
+            {order.map((seat) => {
+              const cell = panel.cells[seat];
+              const isDealer = seat === panel.dealer;
+              return (
+                <div class="entry-row">
+                  <span class="who">
+                    {players[seat]} {isDealer && <small>🎩 deals</small>}
+                  </span>
+                  {panelMode === "scores" && <span class="bet-tag">bet {cell.bet}</span>}
+                  {panelMode !== "scores" && (
+                    <span class="stepper">
+                      {panelMode === "bets" && (
+                        <button type="button" class="icon-btn" data-step="-1" aria-label={`Lower ${players[seat]}'s bet`}>
+                          −
+                        </button>
+                      )}
+                      <input
+                        name={`bet_${seat}`}
+                        type="text"
+                        inputmode="numeric"
+                        pattern="[0-9]*"
+                        aria-label={`${players[seat]}'s bet`}
+                        placeholder="bet"
+                        value={cell.bet ?? ""}
+                        data-bet
+                        required
+                      />
+                      {panelMode === "bets" && (
+                        <button type="button" class="icon-btn" data-step="1" aria-label={`Raise ${players[seat]}'s bet`}>
+                          +
+                        </button>
+                      )}
+                    </span>
+                  )}
+                  {panelMode !== "bets" && (
+                    <span class="stepper">
+                      <button type="button" class="icon-btn" data-flip aria-label={`Flip sign of ${players[seat]}'s score`}>
+                        ±
+                      </button>
+                      <input
+                        name={`score_${seat}`}
+                        type="text"
+                        inputmode="numeric"
+                        aria-label={`${players[seat]}'s score`}
+                        placeholder="score"
+                        value={cell.score ?? ""}
+                        required
+                      />
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {panelMode !== "scores" && (
+            <div class="sum-line">
+              <span class="muted" id="bet-sum">
+                Bets: — of {panel.cards}
+              </span>
+            </div>
+          )}
+          <p class="notice notice-warn" id="bet-warning" hidden>
+            Bets add up to {panel.cards}. Not allowed: the dealer has to change their bet.
+          </p>
+          {error && <p class="notice notice-warn">{error}</p>}
+
+          <div class="actions">
+            {panelMode === "scores" && (
+              <a class="btn btn-ghost btn-small" href={`/games/${game.id}?round=${panel.round}&edit=both`}>
+                Change bets
+              </a>
+            )}
+            {panelMode === "both" && (
+              <a class="btn btn-ghost btn-small" href={`/games/${game.id}`}>
+                Cancel
+              </a>
+            )}
+            <span class="spacer" />
+            <button type="submit" class="btn btn-dark" id="entry-submit">
+              {panelMode === "bets" ? "Lock in bets" : panelMode === "scores" ? "Save scores" : "Save round"}
+            </button>
+          </div>
+        </form>
+      )
+    }
+
+    <section class="card">
+      <div class="sheet-wrap">
+        <table class="sheet">
+          <thead>
+            <tr>
+              <th class="rnd">Rd</th>
+              {players.map((p) => <th>{p}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {rounds.map((row) => {
+              const cls =
+                row.round === panel?.round ? "current" : row.status === "empty" && row.round !== currentRound ? "future" : "";
+              return (
+                <tr class={cls}>
+                  <th class="rnd" scope="row">
+                    <a href={`/games/${game.id}?round=${row.round}`} title={`Edit round ${row.round}`}>
+                      <span class="r">{row.round}</span>
+                      <span class="c">{row.cards} cards</span>
+                    </a>
+                  </th>
+                  {row.cells.map((cell, seat) => (
+                    <td>
+                      <div class="cell">
+                        {cell.bet !== null && (
+                          <span class={`bet ${cell.score === null ? "" : madeBet(cell.score) ? "hit" : "miss"}`} title="bet">
+                            {cell.bet}
+                          </span>
+                        )}
+                        {seat === row.dealer && <span class="dealer" title="dealer">🎩</span>}
+                        {cell.total !== null ? (
+                          <>
+                            <span class="total">{cell.total}</span>
+                            <span class={`delta ${cell.score! > 0 ? "pos" : cell.score! < 0 ? "neg" : "muted"}`}>
+                              {signed(cell.score!)}
+                            </span>
+                          </>
+                        ) : (
+                          <span class="muted">·</span>
+                        )}
+                      </div>
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td class="rnd small muted">Total</td>
+              {totals.map((t) => <td class={`num ${t === lead && (finished || currentRound! > 1) ? "winner" : ""}`}>{t}</td>)}
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div class="legend">
+        <span>Big number = running total</span>
+        <span>Circle = bet (green made, red missed)</span>
+        <span>🎩 = dealer, bids last</span>
+        <span>Tap a round to fix it</span>
+      </div>
+    </section>
+
+    {
+      game.hasPhoto ? (
+        <img src={`/photos/${game.id}`} alt={`Photo from ${game.name}`} class="game-photo" />
+      ) : (
+        <a href={`/games/${game.id}/edit`} class="btn btn-ghost">
+          📷 Add a photo
+        </a>
+      )
+    }
+  </div>
+</Base>
+
+<script>
+  const form = document.getElementById("entry") as HTMLFormElement | null;
+  if (form) {
+    const cards = Number(form.dataset.cards);
+    const betInputs = [...form.querySelectorAll<HTMLInputElement>("input[data-bet]")];
+    const sumEl = document.getElementById("bet-sum");
+    const warning = document.getElementById("bet-warning")!;
+    const submit = document.getElementById("entry-submit") as HTMLButtonElement;
+
+    const refresh = () => {
+      if (!betInputs.length) return;
+      const filled = betInputs.filter((i) => i.value.trim() !== "");
+      const sum = filled.reduce((a, i) => a + (Number(i.value) || 0), 0);
+      const over = sum - cards;
+      if (sumEl) {
+        sumEl.textContent =
+          `Bets: ${sum} of ${cards}` +
+          (filled.length === betInputs.length ? (over > 0 ? ` · overbid by ${over}` : over < 0 ? ` · underbid by ${-over}` : "") : "");
+      }
+      const illegal = filled.length === betInputs.length && sum === cards;
+      warning.hidden = !illegal;
+      submit.disabled = illegal;
+    };
+
+    form.addEventListener("click", (e) => {
+      const btn = (e.target as HTMLElement).closest("button");
+      if (!btn) return;
+      const input = btn.parentElement?.querySelector("input");
+      if (!input) return;
+      if (btn.dataset.step) {
+        const next = (Number(input.value) || 0) + Number(btn.dataset.step);
+        input.value = String(Math.max(0, Math.min(cards, next)));
+      } else if (btn.hasAttribute("data-flip")) {
+        const v = input.value.trim();
+        input.value = v.startsWith("-") ? v.slice(1) : `-${v}`;
+        input.focus();
+      } else return;
+      refresh();
+    });
+    form.addEventListener("input", refresh);
+    refresh();
+
+    // Jump straight into the first empty box so entry is type, tab, type.
+    form.querySelector<HTMLInputElement>('input[type="text"]:placeholder-shown')?.focus({ preventScroll: true });
+  }
+</script>

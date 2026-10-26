@@ -1,0 +1,172 @@
+---
+import Base from "../layouts/Base.astro";
+import { loadAllSheets } from "../lib/games";
+import { shortDate } from "../lib/names";
+import { computeStats } from "../lib/stats";
+
+const TABS = [
+  { key: "leaderboard", label: "Leaderboard" },
+  { key: "games", label: "Games" },
+  { key: "awards", label: "Awards" },
+] as const;
+const requested = Astro.url.searchParams.get("tab");
+const tab = TABS.find((t) => t.key === requested)?.key ?? "leaderboard";
+
+const sheets = await loadAllSheets();
+const stats = computeStats(sheets);
+const ranked = stats.players.filter((p) => p.games > 0 || p.rounds > 0);
+const leader = ranked.find((p) => p.wins > 0) ?? null;
+const pct = (x: number) => `${Math.round(x * 100)}%`;
+const pad = (i: number) => String(i + 1).padStart(2, "0");
+---
+
+<Base>
+  <section class="tiles">
+    <div class="tile tile-gold">
+      <span class="label">Archmage</span>
+      {
+        leader ? (
+          <>
+            <div class="big">{leader.name}</div>
+            <p>
+              {leader.wins} win{leader.wins === 1 ? "" : "s"} · {pct(leader.winRate)}
+            </p>
+            <p class="small">across {leader.games} games</p>
+          </>
+        ) : (
+          <>
+            <div class="big">Nobody yet</div>
+            <p class="small">Finish a game to crown someone.</p>
+          </>
+        )
+      }
+    </div>
+    <div class="tile tile-plum">
+      <span class="label">Highest score</span>
+      {
+        stats.highestFinal ? (
+          <>
+            <div class="big num">{stats.highestFinal.score}</div>
+            <p>{stats.highestFinal.name}</p>
+            <p class="small">
+              <a href={`/games/${stats.highestFinal.gameId}`} style="color:inherit">{stats.highestFinal.gameName}</a>
+            </p>
+          </>
+        ) : (
+          <>
+            <div class="big">—</div>
+            <p class="small">No finished games.</p>
+          </>
+        )
+      }
+    </div>
+    <div class="tile">
+      <span class="label">Activity</span>
+      <dl>
+        <div><dt>Games</dt><dd class="num">{sheets.length}</dd></div>
+        <div><dt>Players</dt><dd class="num">{ranked.length}</dd></div>
+        <div><dt>Rounds</dt><dd class="num">{stats.roundsPlayed}</dd></div>
+        <div title="Rounds where the table bid more tricks than there were cards">
+          <dt>Overbid</dt><dd class="num">{stats.roundsPlayed ? pct(stats.overbidRate) : "—"}</dd>
+        </div>
+      </dl>
+    </div>
+  </section>
+
+  <nav class="tabs">
+    {TABS.map((t) => <a href={`/?tab=${t.key}`} aria-current={t.key === tab ? "page" : undefined}>{t.label}</a>)}
+  </nav>
+
+  {
+    tab === "leaderboard" &&
+      (ranked.length ? (
+        <ol class="rows">
+          {ranked.map((p, i) => (
+            <li class="row">
+              <span class={`pill ${i === 0 && p.wins > 0 ? "pill-dark" : ""}`}>{pad(i)}</span>
+              <div class="grow">
+                <div class="title">
+                  {p.name}
+                  {p === leader && <span class="badge">Archmage</span>}
+                </div>
+                <div class="sub">
+                  {p.games} game{p.games === 1 ? "" : "s"} · avg {Math.round(p.avgFinal)}
+                  {p.rounds > 0 && <> · makes {pct(p.hitRate)} of bets · bids {pct(p.bidShare)} of cards</>}
+                </div>
+              </div>
+              <div class="right">
+                <div class="title num">
+                  {p.wins}W–{p.losses}L
+                </div>
+                <div class="sub num">{p.games ? pct(p.winRate) : "—"}</div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p class="card">
+          No games yet. <a href="/games/new">Start one</a>.
+        </p>
+      ))
+  }
+
+  {
+    tab === "games" &&
+      (sheets.length ? (
+        <ul class="rows">
+          {sheets.map((s) => (
+            <li>
+              <a class="row" href={`/games/${s.game.id}`}>
+                <span class="pill">{shortDate(s.game.playedOn)}</span>
+                <div class="grow">
+                  <div class="title">
+                    {s.game.name}
+                    {!s.finished && <span class="badge badge-live">Round {s.currentRound}/{s.game.numRounds}</span>}
+                  </div>
+                  <div class="sub">
+                    {s.players.join(", ")}
+                    {s.finished && (
+                      <>
+                        {" "}· 🏆 {s.winners.map((w) => s.players[w]).join(" & ")} ({s.totals[s.winners[0]]})
+                      </>
+                    )}
+                  </div>
+                </div>
+                {s.game.hasPhoto && <span aria-label="has photo">📷</span>}
+              </a>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p class="card">
+          No games yet. <a href="/games/new">Start one</a>.
+        </p>
+      ))
+  }
+
+  {
+    tab === "awards" &&
+      (stats.awards.length ? (
+        <>
+          <div class="awards">
+            {stats.awards.map((a) => (
+              <div class="card award">
+                <span class="emoji" aria-hidden="true">{a.emoji}</span>
+                <div>
+                  <div class="muted small">{a.title}</div>
+                  <div class="title" style="font-weight:600">{a.name}</div>
+                  <div class="small muted">{a.detail}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p class="small muted">
+            Rate awards need 10+ rounds. A positive round score counts as a made bet. The table overbids{" "}
+            {pct(stats.overbidRate)} of rounds and underbids {pct(stats.underbidRate)}.
+          </p>
+        </>
+      ) : (
+        <p class="card">Play a few rounds and the awards will start rolling in.</p>
+      ))
+  }
+</Base>

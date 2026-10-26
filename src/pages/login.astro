@@ -1,0 +1,41 @@
+---
+import Base from "../layouts/Base.astro";
+import { AUTH_COOKIE, AUTH_MAX_AGE, authToken, isAuthed, passwordMatches } from "../lib/auth";
+
+const rawNext = Astro.url.searchParams.get("next") ?? "/";
+const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
+
+if (isAuthed(Astro.cookies.get(AUTH_COOKIE)?.value)) return Astro.redirect(next);
+
+let wrong = false;
+if (Astro.request.method === "POST") {
+  const form = await Astro.request.formData();
+  if (passwordMatches(String(form.get("password") ?? ""))) {
+    Astro.cookies.set(AUTH_COOKIE, authToken(), {
+      path: "/",
+      maxAge: AUTH_MAX_AGE,
+      sameSite: "lax",
+      httpOnly: true,
+      secure: import.meta.env.PROD,
+    });
+    return Astro.redirect(next);
+  }
+  wrong = true;
+}
+---
+
+<Base title="Enter" bare>
+  <div class="login">
+    <form method="post" class="card stack">
+      <span class="logo" aria-hidden="true">🧙</span>
+      <h1>Whizard</h1>
+      <p class="muted" style="margin:0">Speak, friend, and enter.</p>
+      <div>
+        <label class="label" for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" autofocus required />
+      </div>
+      {wrong && <p class="notice notice-warn">That's not the magic word.</p>}
+      <button class="btn btn-dark" style="width:100%" type="submit">Enter</button>
+    </form>
+  </div>
+</Base>
