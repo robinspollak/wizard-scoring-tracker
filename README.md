@@ -1,4 +1,4 @@
-# Whizard
+# Wizard
 
 Score tracker for our games of Wizard: bets and scores round by round, plus a
 leaderboard and some silly awards across games.

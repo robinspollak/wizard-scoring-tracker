@@ -1,17 +1,17 @@
 :root {
-  --bg: #f2ecdf;
-  --card: #fbf8f1;
-  --card-2: #f4efe4;
+  --bg: #ebe8e0;
+  --card: #f7f5f0;
+  --card-2: #efece5;
   --field: #ffffff;
-  --ink: #1f1a2e;
-  --muted: #6f6880;
-  --line: #e2dacb;
-  --accent: #5b3fa8;
-  --accent-soft: #e6defa;
+  --ink: #1c1b19;
+  --muted: #6d6a63;
+  --line: #dfdbd2;
+  --accent: #2f5d8a;
+  --accent-soft: #dfe7f0;
   --gold: #f1c84b;
   --gold-ink: #3d2f00;
-  --plum: #2a2140;
-  --plum-ink: #f5efff;
+  --dark-tile: #1c1b19;
+  --dark-tile-ink: #f3f1ec;
   --good: #2f7d4f;
   --bad: #b5452f;
   --warn-bg: #ffe3d6;
@@ -20,24 +20,23 @@
   --ok-ink: #2f4a10;
   --radius: 22px;
   --pad: 22px;
-  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #16131f;
-    --card: #211c2e;
-    --card-2: #2a2439;
-    --field: #15121d;
-    --ink: #ece6f6;
-    --muted: #a198b4;
-    --line: #3a3250;
-    --accent: #b9a2ff;
-    --accent-soft: #3a2f5e;
+    --bg: #151412;
+    --card: #1f1e1b;
+    --card-2: #292724;
+    --field: #121110;
+    --ink: #ece9e2;
+    --muted: #a19d94;
+    --line: #36332e;
+    --accent: #8fb4e0;
+    --accent-soft: #22303f;
     --gold: #e8bf45;
-    --plum: #3b2f5c;
+    --dark-tile: #2c2a26;
     --good: #6cc58f;
     --bad: #f08a72;
     --warn-bg: #4a2418;
@@ -65,8 +64,8 @@ main {
   padding: 0 16px 64px;
 }
 
-h1, h2, h3 { font-family: var(--serif); font-weight: 600; line-height: 1.15; margin: 0; }
-h1 { font-size: 2rem; }
+h1, h2, h3 { font-weight: 650; letter-spacing: -0.01em; line-height: 1.15; margin: 0; }
+h1 { font-size: 1.9rem; }
 h2 { font-size: 1.35rem; }
 
 a { color: var(--accent); }
@@ -94,7 +93,8 @@ a { color: var(--accent); }
   gap: 12px;
   color: inherit;
   text-decoration: none;
-  font: 600 1.75rem var(--serif);
+  font: 650 1.6rem var(--sans);
+  letter-spacing: -0.01em;
 }
 .logo {
   display: grid;
@@ -102,7 +102,7 @@ a { color: var(--accent); }
   width: 46px;
   height: 46px;
   border-radius: 50%;
-  background: var(--plum);
+  background: var(--dark-tile);
   font-size: 26px;
 }
 
@@ -168,7 +168,7 @@ a { color: var(--accent); }
   min-height: 150px;
   background: var(--card);
 }
-.tile .big { font: 600 2.4rem/1.1 var(--serif); margin: 6px 0 4px; position: relative; }
+.tile .big { font: 650 2.3rem/1.1 var(--sans); letter-spacing: -0.02em; margin: 6px 0 4px; position: relative; }
 .tile p { margin: 0; position: relative; }
 .tile-gold { background: var(--gold); color: var(--gold-ink); }
 .tile-gold::after {
@@ -179,22 +179,11 @@ a { color: var(--accent); }
   background-size: 16px 16px;
   mask-image: linear-gradient(to right, transparent, #000 40%);
 }
-.tile-plum { background: var(--plum); color: var(--plum-ink); }
-.tile-plum::after {
-  content: "✦ ✧ ✦\A ✧ ✦ ✧\A ✦ ✧ ✦";
-  white-space: pre;
-  position: absolute;
-  right: 16px;
-  top: 14px;
-  font-size: 1.6rem;
-  line-height: 1.4;
-  letter-spacing: 6px;
-  opacity: 0.25;
-}
-.tile-plum .label, .tile-gold .label { color: inherit; opacity: 0.8; }
+.tile-dark { background: var(--dark-tile); color: var(--dark-tile-ink); }
+.tile-dark .label, .tile-gold .label { color: inherit; opacity: 0.8; }
 .tile dl { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin: 8px 0 0; }
 .tile dt { color: var(--muted); font-size: 0.85rem; }
-.tile dd { margin: 0 0 4px; font: 600 1.4rem var(--serif); }
+.tile dd { margin: 0 0 4px; font: 600 1.35rem var(--sans); }
 
 /* Segmented tabs */
 .tabs {
@@ -408,10 +397,10 @@ table.sheet { border-collapse: separate; border-spacing: 0; width: 100%; font-va
 }
 .cell .bet.hit { border-color: var(--good); color: var(--good); }
 .cell .bet.miss { border-color: var(--bad); color: var(--bad); }
-.cell .total { font: 600 1.25rem/1 var(--serif); }
+.cell .total { font: 650 1.15rem/1 var(--sans); }
 .cell .delta { font-size: 0.72rem; margin-top: 3px; }
 .cell .dealer { position: absolute; top: 3px; right: 3px; font-size: 0.62rem; }
-.sheet tfoot td { padding: 10px 4px; font: 700 1.25rem var(--serif); }
+.sheet tfoot td { padding: 10px 4px; font: 700 1.15rem var(--sans); }
 .sheet tfoot .winner { color: var(--accent); }
 
 .legend { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-size: 0.82rem; margin-top: 12px; }

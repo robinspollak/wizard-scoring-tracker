@@ -28,13 +28,13 @@ if (Astro.request.method === "POST") {
   <div class="login">
     <form method="post" class="card stack">
       <span class="logo" aria-hidden="true">🧙</span>
-      <h1>Whizard</h1>
+      <h1>Wizard</h1>
       <p class="muted" style="margin:0">Speak, friend, and enter.</p>
       <div>
         <label class="label" for="password">Password</label>
         <input id="password" name="password" type="password" autocomplete="current-password" autofocus required />
       </div>
-      {wrong && <p class="notice notice-warn">That's not the magic word.</p>}
+      {wrong && <p class="notice notice-warn">Wrong password.</p>}
       <button class="btn btn-dark" style="width:100%" type="submit">Enter</button>
     </form>
   </div>

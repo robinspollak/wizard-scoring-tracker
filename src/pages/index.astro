@@ -23,7 +23,7 @@ const pad = (i: number) => String(i + 1).padStart(2, "0");
 <Base>
   <section class="tiles">
     <div class="tile tile-gold">
-      <span class="label">Archmage</span>
+      <span class="label">Leader</span>
       {
         leader ? (
           <>
@@ -36,12 +36,12 @@ const pad = (i: number) => String(i + 1).padStart(2, "0");
         ) : (
           <>
             <div class="big">Nobody yet</div>
-            <p class="small">Finish a game to crown someone.</p>
+            <p class="small">Finish a game to get a leader.</p>
           </>
         )
       }
     </div>
-    <div class="tile tile-plum">
+    <div class="tile tile-dark">
       <span class="label">Highest score</span>
       {
         stats.highestFinal ? (
@@ -87,7 +87,7 @@ const pad = (i: number) => String(i + 1).padStart(2, "0");
               <div class="grow">
                 <div class="title">
                   {p.name}
-                  {p === leader && <span class="badge">Archmage</span>}
+                  {p === leader && <span class="badge">Leader</span>}
                 </div>
                 <div class="sub">
                   {p.games} game{p.games === 1 ? "" : "s"} · avg {Math.round(p.avgFinal)}
