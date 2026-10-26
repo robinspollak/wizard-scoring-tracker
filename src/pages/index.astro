@@ -5,17 +5,20 @@ import { shortDate } from "../lib/names";
 import { computeStats } from "../lib/stats";
 
 const TABS = [
-  { key: "leaderboard", label: "Leaderboard" },
   { key: "games", label: "Games" },
+  { key: "leaderboard", label: "Leaderboard" },
   { key: "awards", label: "Awards" },
 ] as const;
 const requested = Astro.url.searchParams.get("tab");
-const tab = TABS.find((t) => t.key === requested)?.key ?? "leaderboard";
+const tab = TABS.find((t) => t.key === requested)?.key ?? "games";
 
 const sheets = await loadAllSheets();
 const stats = computeStats(sheets);
 const ranked = stats.players.filter((p) => p.games > 0 || p.rounds > 0);
 const leader = ranked.find((p) => p.wins > 0) ?? null;
+// Awards are noise until there's some history behind them.
+const AWARDS_AFTER_GAMES = 5;
+const awardsUnlocked = stats.finishedGames >= AWARDS_AFTER_GAMES;
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 const pad = (i: number) => String(i + 1).padStart(2, "0");
 ---
@@ -148,7 +151,11 @@ const pad = (i: number) => String(i + 1).padStart(2, "0");
 
   {
     tab === "awards" &&
-      (stats.awards.length ? (
+      (!awardsUnlocked ? (
+        <p class="card">
+          Awards show up after {AWARDS_AFTER_GAMES} finished games ({stats.finishedGames} so far).
+        </p>
+      ) : stats.awards.length ? (
         <>
           <div class="awards">
             {stats.awards.map((a) => (
