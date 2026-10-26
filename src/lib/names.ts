@@ -23,10 +23,10 @@ export function defaultGameName(playedOn: string, gamesAlreadyThatDay: number): 
   return `${WEEKDAYS[d.getUTCDay()]} ${MONTHS[d.getUTCMonth()]} ${ordinal(d.getUTCDate())} game ${gamesAlreadyThatDay + 1}`;
 }
 
-/** "10/25" for the date pill. */
+/** "Oct 25" for the date pill. */
 export function shortDate(playedOn: string): string {
   const d = parseIsoDate(playedOn);
-  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`;
+  return `${MONTHS[d.getUTCMonth()].slice(0, 3)} ${d.getUTCDate()}`;
 }
 
 /** "Sun, Oct 25 2026" for headers. */

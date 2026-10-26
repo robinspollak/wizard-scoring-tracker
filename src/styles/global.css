@@ -233,6 +233,7 @@ a.row:hover { outline: 2px solid var(--accent-soft); }
   background: var(--card-2);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .pill-dark { background: var(--ink); color: var(--bg); }
 .badge {
